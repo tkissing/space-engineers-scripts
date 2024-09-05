@@ -1,0 +1,1 @@
+dotnet new mdk2pbscript -n $1 -o $1
