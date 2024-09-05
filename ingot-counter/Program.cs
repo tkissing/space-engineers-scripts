@@ -67,7 +67,8 @@ namespace IngameScript
                         {
 
                             ingotCounts[metal] += item.Amount;
-                        } else
+                        }
+                        else
                         {
                             ingotCounts[metal] = item.Amount;
                         }
@@ -75,11 +76,11 @@ namespace IngameScript
 
                 }
             }
-            
+
             foreach (var itemName in ingotCounts.Keys)
             {
                 var parts = itemName.Split('/');
-                
+
                 if (parts.Length > 0)
                 {
                     var amount = ToSI(ingotCounts[itemName]);
@@ -88,8 +89,28 @@ namespace IngameScript
             }
 
             string text = String.Join("\n", lines.ToArray());
+            Show(text);
+        }
 
-            (Me as IMyTextSurfaceProvider).GetSurface(0).WriteText(text);
+        private void Show(string text)
+        {
+            var match = (new System.Text.RegularExpressions.Regex(" SHOW:([^ ]+)")).Match(Me.DisplayNameText);
+
+
+            List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
+            if (match.Success)
+            {
+                var search = match.Result("$1");
+                GridTerminalSystem.GetBlocksOfType(blocks, block => block.IsSameConstructAs(Me) && block is IMyTextSurfaceProvider && block.DisplayNameText.Contains(search));
+            }
+
+            blocks.Add(Me);
+
+            foreach (var block in blocks)
+            {
+                (block as IMyTextSurfaceProvider).GetSurface(0).WriteText(text);
+            }
+
             Echo(text);
         }
 
