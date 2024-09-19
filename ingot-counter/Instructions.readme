@@ -1,5 +1,21 @@
-﻿R e a d m e
------------
+﻿# Lino's Ingot Counter for Space Engineers 
 
-In this file you can include any instructions or other comments you want to have injected onto the 
-top of your final script. You can safely delete this file if you do not want any such comments.
+For detailed info, please check out the Readme.md at https://github.com/tkissing/space-engineers-scripts/tree/main/ingot-counter
+
+All configuration goes into CustomData.
+Every directive is made up of one keyword followed by a colon followed by an argument, no spaces.
+All directives and arguments are case-sensitive.
+
+Programmable Block directives:
+display:somestring
+^^^^^ Will project inventory display to all LCD on same grid that have somestring in their name
+
+Cargo Container directives:
+insert:Ore
+^^^^^ Will try to move ore to this container
+
+
+insert:Ingot
+prefer:Nickel
+^^^^^ Will try to move ingots to this container. Nickel will go here if possible even if other container have insert:Ingot
+
