@@ -35,12 +35,12 @@ namespace IngameScript
             List<string> debug = new List<string>();
 
             List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
-            List<IMyShipConnector> connectors = new List<IMyShipConnector>();
+            List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
 
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
-            GridTerminalSystem.GetBlocksOfType(connectors, block => block.IsSameConstructAs(Me) && block is IMyShipConnector);
+            GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery));
 
-            SortItems(containers, connectors, lines, debug);
+            SortItems(containers, blocksToDrain, lines, debug);
 
             CountItems(containers, lines);
 
@@ -53,7 +53,7 @@ namespace IngameScript
             }
         }
 
-        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyShipConnector> connectors, List<string> lines, List<string> debug)
+        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<VRage.Game.ModAPI.Ingame.IMyEntity> blocksToDrainOnly, List<string> lines, List<string> debug)
         {
             Dictionary<string, List<IMyCargoContainer>> preferredContainers = new Dictionary<string, List<IMyCargoContainer>>();
             foreach (var container in containers)
@@ -74,40 +74,47 @@ namespace IngameScript
             }
 
             MoveItemsToTargets(containers, preferredContainers);
-            MoveItemsToTargets(connectors, preferredContainers);
+            MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
         }
 
         private void MoveItemsToTargets(IEnumerable<VRage.Game.ModAPI.Ingame.IMyEntity> containers, Dictionary<string, List<IMyCargoContainer>> preferredContainers)
         {
-            List<MyInventoryItem> items = new List<MyInventoryItem>();
-
             foreach (var container in containers)
             {
                 if (container.HasInventory)
                 {
-                    var inventory = container.GetInventory();
-                    inventory.GetItems(items);
-
-                    foreach (var item in items)
+                    for (var i = 0; i < container.InventoryCount; i++)
                     {
-                        var itemName = item.Type.ToString();
+                        List<MyInventoryItem> items = new List<MyInventoryItem>();
+                        var inventory = container.GetInventory(i);
+                        inventory.GetItems(items);
 
-                        var prefs = preferredContainers.Where(p => itemName.Contains($"_{p.Key}/")).FirstOrDefault().Value ?? new List<IMyCargoContainer>();
-
-                        if (!prefs.Any(p => p == container))
+                        foreach (var item in items)
                         {
-                            foreach (var pref in SortedPreferred(prefs, item))
+                            var itemName = item.Type.ToString();
+
+                            if (container is IMyRefinery && itemName.Contains("_Ore/"))
                             {
-                                if (inventory.CanTransferItemTo(pref.GetInventory(), item.Type))
+                                continue;
+                            }
+
+                            var prefs = preferredContainers.Where(p => itemName.Contains($"_{p.Key}/")).FirstOrDefault().Value ?? new List<IMyCargoContainer>();
+
+                            if (!prefs.Any(p => p == container))
+                            {
+                                foreach (var pref in SortedPreferred(prefs, item))
                                 {
-                                    if (inventory.TransferItemTo(pref.GetInventory(), item) || inventory.TransferItemTo(pref.GetInventory(), item, MyFixedPoint.SmallestPossibleValue))
+                                    if (inventory.CanTransferItemTo(pref.GetInventory(), item.Type))
                                     {
-                                        break;
+                                        if (inventory.TransferItemTo(pref.GetInventory(), item) || inventory.TransferItemTo(pref.GetInventory(), item, MyFixedPoint.SmallestPossibleValue))
+                                        {
+                                            break;
+                                        }
                                     }
                                 }
                             }
-                        }
 
+                        }
                     }
                 }
             }
@@ -200,7 +207,7 @@ namespace IngameScript
 
         private void Debug(List<string> lines)
         {
-            WriteText(lines, new IMyTerminalBlock[] { Me }, true); 
+            WriteText(lines, new IMyTerminalBlock[] { Me }, true);
         }
 
         private void WriteText(List<string> lines, IEnumerable<IMyTerminalBlock> blocks, bool debug = false)
@@ -253,7 +260,7 @@ namespace IngameScript
 
             var matches = regex.Matches(text);
 
-            for (var i =0; i < matches.Count; i++)
+            for (var i = 0; i < matches.Count; i++)
             {
                 var match = matches[i];
                 if (match.Success)
