@@ -91,14 +91,12 @@ namespace IngameScript
 
                         foreach (var item in items)
                         {
-                            var itemName = item.Type.ToString();
-
-                            if (container is IMyRefinery && itemName.Contains("_Ore/"))
+                            if (container is IMyRefinery && IsOre(item))
                             {
                                 continue;
                             }
 
-                            var prefs = preferredContainers.Where(p => itemName.Contains($"_{p.Key}/")).FirstOrDefault().Value ?? new List<IMyCargoContainer>();
+                            var prefs = preferredContainers.Where(p => IsOfType(item, p.Key)).FirstOrDefault().Value ?? new List<IMyCargoContainer>();
 
                             if (!prefs.Any(p => p == container))
                             {
@@ -132,18 +130,16 @@ namespace IngameScript
 
                 foreach (var item in items)
                 {
-                    var itemName = item.Type.ToString();
-
                     foreach (var category in categories)
                     {
-                        if (itemName.Contains($"_{category}/"))
+                        if (IsOfType(item, category))
                         {
                             if (!counts.ContainsKey(category))
                             {
                                 counts[category] = new SortedDictionary<string, MyFixedPoint>();
                             }
 
-                            var subtype = item.Type.SubtypeId;
+                            var subtype = DisplayName(item);
 
                             if (counts[category].ContainsKey(subtype))
                             {
@@ -289,6 +285,28 @@ namespace IngameScript
             }
 
             return scaled.ToString(format) + prefix;
+        }
+
+        private bool IsOre(MyInventoryItem item)
+        {
+            return IsOfType(item, "Ore");
+        }
+
+        private bool IsOfType(MyInventoryItem item, string type)
+        {
+            return item.Type.ToString().Contains($"_{type}/");
+        }
+
+        private string DisplayName(MyInventoryItem item)
+        {
+            var name = item.Type.SubtypeId;
+
+            if (name == "Stone" && IsOfType(item, "Ingot"))
+            {
+                name = "Gravel";
+            }
+
+            return name;
         }
 
         // COPY AND PASTE END ON THIS LINE
