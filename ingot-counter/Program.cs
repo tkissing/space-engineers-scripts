@@ -38,7 +38,7 @@ namespace IngameScript
             List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
 
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
-            GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery));
+            GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
 
             SortItems(containers, blocksToDrain, lines, debug);
 
@@ -91,7 +91,7 @@ namespace IngameScript
 
                         foreach (var item in items)
                         {
-                            if (container is IMyRefinery && IsOre(item))
+                            if ((container is IMyRefinery && IsOre(item)) || (container is IMyAssembler && IsIngot(item)))
                             {
                                 continue;
                             }
@@ -287,6 +287,11 @@ namespace IngameScript
             return scaled.ToString(format) + prefix;
         }
 
+        private bool IsIngot(MyInventoryItem item)
+        {
+            return IsOfType(item, "Ingot");
+        }
+
         private bool IsOre(MyInventoryItem item)
         {
             return IsOfType(item, "Ore");
@@ -301,7 +306,7 @@ namespace IngameScript
         {
             var name = item.Type.SubtypeId;
 
-            if (name == "Stone" && IsOfType(item, "Ingot"))
+            if (name == "Stone" && IsIngot(item))
             {
                 name = "Gravel";
             }
