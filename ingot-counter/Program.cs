@@ -74,7 +74,10 @@ namespace IngameScript
             }
 
             MoveItemsToTargets(containers, preferredContainers);
-            MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
+            if (DateTime.Now.Second % 5 == 0)
+            {
+                MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
+            }
         }
 
         private void MoveItemsToTargets(IEnumerable<VRage.Game.ModAPI.Ingame.IMyEntity> containers, Dictionary<string, List<IMyCargoContainer>> preferredContainers)
