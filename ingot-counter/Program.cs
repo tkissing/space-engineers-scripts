@@ -58,7 +58,7 @@ namespace IngameScript
             Dictionary<string, List<IMyCargoContainer>> preferredContainers = new Dictionary<string, List<IMyCargoContainer>>();
             foreach (var container in containers)
             {
-                if (container.IsWorking && container.CustomData.Length > 5 && FreeVolume(container) > 2)
+                if (container.IsWorking && container.CustomData.Length > 5)
                 {
                     foreach (var key in GetFirstCaptures(insertRegex, container.CustomData))
                     {
