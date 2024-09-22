@@ -21,8 +21,7 @@ namespace IngameScript
 
         public static string[] categories = new string[] { "Component", "Ingot", "Ore" };
 
-        public static System.Text.RegularExpressions.Regex showRegex = new System.Text.RegularExpressions.Regex("display: ?([^\\s]+)");
-        public static System.Text.RegularExpressions.Regex insertRegex = new System.Text.RegularExpressions.Regex("insert: ?([^\\s]+)");
+        public static System.Text.RegularExpressions.Regex configRegex = new System.Text.RegularExpressions.Regex("([a-z]+): ?([^\\s]+( \\d+)?)");
 
         public Program()
         {
@@ -60,7 +59,7 @@ namespace IngameScript
             {
                 if (container.IsWorking && container.CustomData.Length > 5)
                 {
-                    foreach (var key in GetFirstCaptures(insertRegex, container.CustomData))
+                    foreach (var key in GetConfig("insert", container.CustomData))
                     {
                         if (!preferredContainers.ContainsKey(key))
                         {
@@ -189,7 +188,7 @@ namespace IngameScript
         {
             List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
 
-            var matches = GetFirstCaptures(showRegex, $"{Me.DisplayNameText} {Me.CustomData}");
+            var matches = GetConfig("display", $"{Me.DisplayNameText} {Me.CustomData}");
 
             foreach (var search in matches)
             {
@@ -253,18 +252,18 @@ namespace IngameScript
             return sorted;
         }
 
-        private IEnumerable<string> GetFirstCaptures(System.Text.RegularExpressions.Regex regex, string text)
+        private IEnumerable<string> GetConfig(string key, string text)
         {
             var captures = new List<string>();
 
-            var matches = regex.Matches(text);
+            var matches = configRegex.Matches(text);
 
             for (var i = 0; i < matches.Count; i++)
             {
                 var match = matches[i];
-                if (match.Success)
+                if (match.Success && match.Result("$1") == key)
                 {
-                    captures.Add(match.Result("$1"));
+                    captures.Add(match.Result("$2"));
                 }
             }
 
