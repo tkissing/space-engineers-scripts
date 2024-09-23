@@ -1,16 +1,10 @@
-﻿using Microsoft.Build.Framework.XamlTypes;
-using Sandbox.Game;
-using Sandbox.ModAPI.Ingame;
+﻿using Sandbox.ModAPI.Ingame;
 using System;
 using System.Collections.Generic;
-using System.Collections.Immutable;
-using System.ComponentModel;
-using System.Diagnostics;
 using System.Linq;
-using System.Xml.Linq;
 using VRage;
+using VRage.Game;
 using VRage.Game.ModAPI.Ingame;
-using VRage.ModAPI;
 
 
 namespace IngameScript
@@ -39,9 +33,11 @@ namespace IngameScript
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
             GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
 
-            SortItems(containers, blocksToDrain, lines, debug);
+            SortItems(containers, blocksToDrain, lines);
 
-            CountItems(containers, lines);
+            var counts = CountItems(containers, lines);
+
+            CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5), lines, debug);
 
             bool doDebug = Me.CustomData.Contains("DEBUG!");
 
@@ -52,7 +48,7 @@ namespace IngameScript
             }
         }
 
-        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<VRage.Game.ModAPI.Ingame.IMyEntity> blocksToDrainOnly, List<string> lines, List<string> debug)
+        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly, List<string> lines)
         {
             Dictionary<string, List<IMyCargoContainer>> preferredContainers = new Dictionary<string, List<IMyCargoContainer>>();
             foreach (var container in containers)
@@ -66,8 +62,6 @@ namespace IngameScript
                             preferredContainers[key] = new List<IMyCargoContainer>();
                         }
                         preferredContainers[key].Add(container);
-
-                        debug.Add($"{container.DisplayNameText} gets {key}, free volume {FreeVolume(container)}");
                     }
                 }
             }
@@ -120,7 +114,7 @@ namespace IngameScript
             }
         }
 
-        private void CountItems(IEnumerable<IMyCargoContainer> containers, List<string> lines)
+        private SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> CountItems(IEnumerable<IMyCargoContainer> containers, List<string> lines)
         {
             SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts = new SortedDictionary<string, SortedDictionary<string, MyFixedPoint>>();
 
@@ -170,6 +164,54 @@ namespace IngameScript
                     WriteCounter(lines, counts[cat], cat);
                 }
             }
+
+            return counts;
+        }
+
+        private void CraftItems(SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts, IEnumerable<IMyTerminalBlock> assemblers, List<string> lines, List<string> debug)
+        {
+            foreach (IMyAssembler assembler in assemblers)
+            {
+                if (assembler.IsProducing || !assembler.IsWorking)
+                {
+                    continue;
+                }
+
+                var desiredCounts = GetConfig("craft", assembler.CustomData);
+
+                foreach (var desired in desiredCounts)
+                {
+                    var typeText = desired.Split(' ').First();
+                    var c = long.Parse(desired.Split(' ').Last());
+
+                    MyDefinitionId? bp = GetBlueprintFor(typeText);
+
+                    if (bp.HasValue)
+                    {
+                        try
+                        {
+                            long cur = (long)GetCountFor(counts, typeText);
+
+                            debug.Add($"{assembler.DisplayNameText} wants {c} {typeText}, we have {cur}");
+
+                            if (c > 0 && cur < c && assembler.CanUseBlueprint(bp.Value))
+                            {
+                                debug.Add($"Crafting {desired} on {assembler.DisplayNameText}");
+                                assembler.AddQueueItem(bp.Value, 1d);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            debug.Add(e.Message);
+                        }
+                    }
+                    else
+                    {
+                        debug.Add($"Blueprint for {typeText} is currently not supported as auto-craft target");
+                    }
+                }
+            }
+
         }
 
         private void WriteCounter(List<string> lines, SortedDictionary<string, MyFixedPoint> counterToShow, string categoryToShow)
@@ -228,6 +270,48 @@ namespace IngameScript
         private MyFixedPoint FreeVolume(IMyCargoContainer cargo)
         {
             return cargo.GetInventory().MaxVolume - cargo.GetInventory().CurrentVolume;
+        }
+
+        private MyDefinitionId? GetBlueprintFor(string typeText)
+        {
+            string[] t = typeText.Split('/');
+            string bp = "";
+
+            if (t.Length == 2 && t[0] == "Component")
+            {
+                switch (t[1])
+                {
+                    case "SmallTube":
+                    case "SolarCell":
+                    case "SteelPlate":
+                    case "Superconductor":
+                    case "InteriorPlate":
+                    case "MetalGrid":
+                    case "BulletproofGlass":
+                    case "Display":
+                    case "LargeTube":
+                    case "PowerCell":
+                        bp = t[1];
+                        break;
+                    default:
+                        bp = $"{t[1]}Component";
+                        break;
+                }
+            }
+
+            if (bp.Length > 0)
+            {
+                return MyDefinitionId.Parse($"MyObjectBuilder_BlueprintDefinition/{bp}");
+            }
+
+            return null;
+        }
+
+        private MyFixedPoint GetCountFor(SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts, string typeText)
+        {
+            var t = typeText.Split('/');
+
+            return counts.ContainsKey(t[0]) && counts[t[0]].ContainsKey(t[1]) ? counts[t[0]][t[1]] : MyFixedPoint.Zero;
         }
 
         private IEnumerable<IMyCargoContainer> SortedPreferred(List<IMyCargoContainer> prefs, MyInventoryItem item)
