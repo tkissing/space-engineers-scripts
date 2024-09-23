@@ -17,6 +17,8 @@ namespace IngameScript
 
         public static System.Text.RegularExpressions.Regex configRegex = new System.Text.RegularExpressions.Regex("([a-z]+): ?([^\\s]+( \\d+)?)");
 
+        public List<string> debug = new List<string>();
+
         public Program()
         {
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
@@ -25,7 +27,6 @@ namespace IngameScript
         public void Main(string argument, UpdateType updateSource)
         {
             List<string> lines = new List<string>();
-            List<string> debug = new List<string>();
 
             List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
             List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
@@ -37,15 +38,16 @@ namespace IngameScript
 
             var counts = CountItems(containers, lines);
 
-            CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5), lines, debug);
+            CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
 
-            bool doDebug = Me.CustomData.Contains("DEBUG!");
+            Show(lines);
 
-            Show(lines, doDebug);
-            if (doDebug)
+            if (Me.CustomData.Contains("DEBUG!"))
             {
-                Debug(debug);
+                Debug();
             }
+
+            debug.Clear();
         }
 
         private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly, List<string> lines)
@@ -69,6 +71,7 @@ namespace IngameScript
             MoveItemsToTargets(containers, preferredContainers);
             if (DateTime.Now.Second % 5 == 0)
             {
+                debug.Add($"Draining items from {blocksToDrainOnly.Count()} blocks");
                 MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
             }
         }
@@ -168,7 +171,7 @@ namespace IngameScript
             return counts;
         }
 
-        private void CraftItems(SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts, IEnumerable<IMyTerminalBlock> assemblers, List<string> lines, List<string> debug)
+        private void CraftItems(SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts, IEnumerable<IMyTerminalBlock> assemblers)
         {
             foreach (IMyAssembler assembler in assemblers)
             {
@@ -192,7 +195,7 @@ namespace IngameScript
                         {
                             long cur = (long)GetCountFor(counts, typeText);
 
-                            debug.Add($"{assembler.DisplayNameText} wants {c} {typeText}, we have {cur}");
+                            //debug.Add($"{assembler.DisplayNameText} wants {c} {typeText}, we have {cur}");
 
                             if (c > 0 && cur < c && assembler.CanUseBlueprint(bp.Value))
                             {
@@ -226,7 +229,7 @@ namespace IngameScript
             }
         }
 
-        private void Show(List<string> lines, bool debug = false)
+        private void Show(List<string> lines)
         {
             List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
 
@@ -237,20 +240,20 @@ namespace IngameScript
                 GridTerminalSystem.GetBlocksOfType(blocks, block => block.IsSameConstructAs(Me) && block is IMyTextSurfaceProvider && block.DisplayNameText.Contains(search));
             }
 
-            if (!debug)
-            {
-                blocks.Add(Me);
-            }
+            blocks.Add(Me);
 
-            WriteText(lines, blocks, !debug);
+            WriteText(lines, blocks);
         }
 
-        private void Debug(List<string> lines)
+        private void Debug()
         {
-            WriteText(lines, new IMyTerminalBlock[] { Me }, true);
+            if (debug.Count > 0)
+            {
+                Echo($"{String.Join("\n", debug)}");
+            }
         }
 
-        private void WriteText(List<string> lines, IEnumerable<IMyTerminalBlock> blocks, bool debug = false)
+        private void WriteText(List<string> lines, IEnumerable<IMyTerminalBlock> blocks)
         {
             float fontSize = Math.Min(1.2f, 17.0f / lines.Count());
             string text = String.Join("\n", lines);
@@ -259,11 +262,6 @@ namespace IngameScript
             {
                 (block as IMyTextSurfaceProvider).GetSurface(0).FontSize = fontSize;
                 (block as IMyTextSurfaceProvider).GetSurface(0).WriteText(text);
-            }
-
-            if (debug)
-            {
-                Echo($"{text}");
             }
         }
 
