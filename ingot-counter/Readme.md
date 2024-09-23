@@ -52,6 +52,48 @@ It is strongly recommended to not have any sorters on the grid with Drain All en
 It is fine to create a one-way pull away from the containers managed by this script. 
 Generally speaking, if you see items moving back and forth, it's most certainly a sorter with Drain All causing it.
 
+### Auto-crafting
+
+You can now optionally have this script craft components for you.
+
+To use this feature, edit the Custom Data for the assembler you want to do the crafting with `craft:` directives.
+
+Here is a list of all currently supported components in the right format:
+
+```
+craft:Component/BulletproofGlass 1000
+craft:Component/Computer 1000
+craft:Component/Construction 1000
+craft:Component/Detector 1000
+craft:Component/Display 1000
+craft:Component/Explosives 1000
+craft:Component/Girder 1000
+craft:Component/GravityGenerator 1000
+craft:Component/InteriorPlate 1000
+craft:Component/LargeTube 1000
+craft:Component/Medical 1000
+craft:Component/MetalGrid 1000
+craft:Component/Motor 1000
+craft:Component/PowerCell 1000
+craft:Component/RadioCommunication 1000
+craft:Component/Reactor 1000
+craft:Component/SmallTube 1000
+craft:Component/SolarCell 1000
+craft:Component/SteelPlate 1000
+craft:Component/Superconductor 1000
+craft:Component/Thrust 1000
+```
+
+This feature is designed to fill up your containers as needed while you are "gone" from the base, not to keep up with active building. 
+Whenever the script runs, it will look for configured assemblers that have an empty build queue. It will then add 1 item of each component
+to the queue for which the actual count is below the target.
+This should ensure that any manually (or build planner) created tasks are handled with minimal delay. 
+If you have multiple assemblers, they all contribute to the overall inventory. In some cases that might lead to you having
+slightly more items than your target. It also allows you to deprioritize certain components by listing no or a lower target for them
+on some assemblers. 
+If for example you have two assemblers, one with `craft:Component/SteelPlate 100` and another with `craft:Component/SteelPlate 5000`,
+the first one will only build steel plates when you have less than 100 total while the other will keep building them until you are at 5000.
+
 
 ## Appendix
 

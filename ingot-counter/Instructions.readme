@@ -19,3 +19,6 @@ insert:Ingot
 prefer:Nickel
 ^^^^^ Will try to move ingots to this container. Nickel will go here if possible even if other container have insert:Ingot
 
+Assembler directives:
+craft:Component/Construction 1000
+^^^^^ If this assembler is idle and your overall count for Construction components is below 1000, add 1 component to the build queue
