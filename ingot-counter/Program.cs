@@ -20,6 +20,11 @@ namespace IngameScript
         private List<string> debug = new List<string>();
         private List<string> lines = new List<string>();
 
+        private List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
+        private List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
+
+        private bool IsDebugMode = false;
+
         public Program()
         {
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
@@ -27,8 +32,10 @@ namespace IngameScript
 
         public void Main(string argument, UpdateType updateSource)
         {
-            List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
-            List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
+            IsDebugMode = Me.CustomData.Contains("DEBUG!");
+
+            containers.Clear();
+            blocksToDrain.Clear();
 
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
             GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
@@ -39,14 +46,9 @@ namespace IngameScript
 
             CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
 
+            Debug();
+
             RenderInventory(counts);
-
-            if (Me.CustomData.Contains("DEBUG!"))
-            {
-                Debug();
-            }
-
-            debug.Clear();
         }
 
         private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly)
@@ -68,9 +70,8 @@ namespace IngameScript
             }
 
             MoveItemsToTargets(containers, preferredContainers);
-            if (DateTime.Now.Second % 4 == 0)
+            if (DateTime.Now.Second % 3 == 0)
             {
-                debug.Add($"Draining items from {blocksToDrainOnly.Count()} blocks");
                 MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
             }
         }
@@ -181,8 +182,6 @@ namespace IngameScript
                         {
                             long cur = (long)GetCountFor(counts, typeText);
 
-                            //debug.Add($"{assembler.DisplayNameText} wants {c} {typeText}, we have {cur}");
-
                             if (c > 0 && cur < c && assembler.CanUseBlueprint(bp.Value))
                             {
                                 debug.Add($"Crafting {bp.Value.SubtypeName} on {assembler.DisplayNameText} to get to {c}");
@@ -239,16 +238,18 @@ namespace IngameScript
                 if (isDefaultCategory)
                 {
                     WriteText(lines, new List<IMyTerminalBlock> { Me });
+                    Echo(String.Join("\n", lines));
                 }
             }
         }
 
         private void Debug()
         {
-            if (debug.Count > 0)
+            if (IsDebugMode && debug.Count > 0)
             {
-                Echo($"{String.Join("\n", debug)}");
+                Echo(String.Join("\n", debug));
             }
+            debug.Clear();
         }
 
         private void WriteText(List<string> lines, IEnumerable<IMyTerminalBlock> blocks)
@@ -360,7 +361,8 @@ namespace IngameScript
                 return item.Amount;
             }
 
-            if ((float)fv > iv) {
+            if ((float)fv > iv)
+            {
                 return fv;
             }
 
