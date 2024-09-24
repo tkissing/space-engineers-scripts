@@ -225,10 +225,11 @@ namespace IngameScript
 
             foreach (var dn in displayNames)
             {
-                GridTerminalSystem.GetBlocksOfType(blocks, block => block.IsSameConstructAs(Me) && block is IMyTextSurfaceProvider && block.DisplayNameText.Contains(dn));
+                GridTerminalSystem.GetBlocksOfType(blocks, block => block.IsSameConstructAs(Me) && block is IMyTextSurfaceProvider &&
+                    (block.DisplayNameText.Contains(dn) || GetConfig("display", block.CustomData).FirstOrDefault() == dn));
             }
 
-            foreach  (var category in categoriesWithItems)
+            foreach (var category in categoriesWithItems)
             {
                 bool isDefaultCategory = category == timeBasedCategory;
                 lines.Clear();
