@@ -17,7 +17,8 @@ namespace IngameScript
 
         public static System.Text.RegularExpressions.Regex configRegex = new System.Text.RegularExpressions.Regex("([a-z]+): ?([^\\s]+( \\d+)?)");
 
-        public List<string> debug = new List<string>();
+        private List<string> debug = new List<string>();
+        private List<string> lines = new List<string>();
 
         public Program()
         {
@@ -26,21 +27,19 @@ namespace IngameScript
 
         public void Main(string argument, UpdateType updateSource)
         {
-            List<string> lines = new List<string>();
-
             List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
             List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
 
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
             GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
 
-            SortItems(containers, blocksToDrain, lines);
+            SortItems(containers, blocksToDrain);
 
-            var counts = CountItems(containers, lines);
+            var counts = CountItems(containers);
 
             CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
 
-            Show(lines);
+            RenderInventory(counts);
 
             if (Me.CustomData.Contains("DEBUG!"))
             {
@@ -50,7 +49,7 @@ namespace IngameScript
             debug.Clear();
         }
 
-        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly, List<string> lines)
+        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly)
         {
             Dictionary<string, List<IMyCargoContainer>> preferredContainers = new Dictionary<string, List<IMyCargoContainer>>();
             foreach (var container in containers)
@@ -69,14 +68,14 @@ namespace IngameScript
             }
 
             MoveItemsToTargets(containers, preferredContainers);
-            if (DateTime.Now.Second % 5 == 0)
+            if (DateTime.Now.Second % 3 == 0)
             {
                 debug.Add($"Draining items from {blocksToDrainOnly.Count()} blocks");
                 MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
             }
         }
 
-        private void MoveItemsToTargets(IEnumerable<VRage.Game.ModAPI.Ingame.IMyEntity> containers, Dictionary<string, List<IMyCargoContainer>> preferredContainers)
+        private void MoveItemsToTargets(IEnumerable<IMyCubeBlock> containers, Dictionary<string, List<IMyCargoContainer>> preferredContainers)
         {
             foreach (var container in containers)
             {
@@ -117,7 +116,7 @@ namespace IngameScript
             }
         }
 
-        private SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> CountItems(IEnumerable<IMyCargoContainer> containers, List<string> lines)
+        private SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> CountItems(IEnumerable<IMyCargoContainer> containers)
         {
             SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts = new SortedDictionary<string, SortedDictionary<string, MyFixedPoint>>();
 
@@ -151,20 +150,6 @@ namespace IngameScript
                             }
                         }
                     }
-                }
-            }
-
-            if (categories.Sum(cat => counts[cat].Count()) > 12)
-            {
-                int secondsPerCategory = (int)(60 / categories.Count());
-                var categoryToShow = categories[(int)Math.Floor((double)(DateTime.Now.Second / secondsPerCategory))];
-                WriteCounter(lines, counts[categoryToShow], categoryToShow);
-            }
-            else
-            {
-                foreach (var cat in categories)
-                {
-                    WriteCounter(lines, counts[cat], cat);
                 }
             }
 
@@ -217,9 +202,9 @@ namespace IngameScript
 
         }
 
-        private void WriteCounter(List<string> lines, SortedDictionary<string, MyFixedPoint> counterToShow, string categoryToShow)
+        private void WriteCounter(List<string> lines, SortedDictionary<string, MyFixedPoint> counterToShow, string categoryName)
         {
-            lines.Add($"Current {categoryToShow} Inventory");
+            lines.Add($"Current {categoryName} Inventory");
 
             foreach (var itemName in counterToShow.Keys)
             {
@@ -229,20 +214,32 @@ namespace IngameScript
             }
         }
 
-        private void Show(List<string> lines)
+        private void RenderInventory(SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts)
         {
+            var categoriesWithItems = categories.Where(c => counts.ContainsKey(c) && counts[c].Count() > 0).ToArray();
+            var secondsPerCategory = (int)(60 / categoriesWithItems.Length);
+            var timeBasedCategory = categoriesWithItems[(int)Math.Floor((double)(DateTime.Now.Second / secondsPerCategory))];
+
+            var displayNames = GetConfig("display", $"{Me.DisplayNameText} {Me.CustomData}");
             List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
 
-            var matches = GetConfig("display", $"{Me.DisplayNameText} {Me.CustomData}");
-
-            foreach (var search in matches)
+            foreach (var dn in displayNames)
             {
-                GridTerminalSystem.GetBlocksOfType(blocks, block => block.IsSameConstructAs(Me) && block is IMyTextSurfaceProvider && block.DisplayNameText.Contains(search));
+                GridTerminalSystem.GetBlocksOfType(blocks, block => block.IsSameConstructAs(Me) && block is IMyTextSurfaceProvider && block.DisplayNameText.Contains(dn));
             }
 
-            blocks.Add(Me);
+            foreach  (var category in categoriesWithItems)
+            {
+                bool isDefaultCategory = category == timeBasedCategory;
+                lines.Clear();
 
-            WriteText(lines, blocks);
+                WriteCounter(lines, counts[category], category);
+                WriteText(lines, blocks.Where(b => DisplaysCategory(b, category, isDefaultCategory)));
+                if (isDefaultCategory)
+                {
+                    WriteText(lines, new List<IMyTerminalBlock> { Me });
+                }
+            }
         }
 
         private void Debug()
@@ -352,6 +349,12 @@ namespace IngameScript
             return captures;
         }
 
+        private bool DisplaysCategory(IMyTerminalBlock block, string category, bool isDefault)
+        {
+            var matches = GetConfig("category", block.CustomData);
+
+            return matches.Count() > 0 ? matches.Any(m => m == category) : isDefault;
+        }
         private string ToSI(MyFixedPoint a, string format = "f2")
         {
             double d = ((double)a);
