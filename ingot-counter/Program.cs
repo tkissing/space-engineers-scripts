@@ -68,7 +68,7 @@ namespace IngameScript
             }
 
             MoveItemsToTargets(containers, preferredContainers);
-            if (DateTime.Now.Second % 3 == 0)
+            if (DateTime.Now.Second % 4 == 0)
             {
                 debug.Add($"Draining items from {blocksToDrainOnly.Count()} blocks");
                 MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
@@ -102,14 +102,15 @@ namespace IngameScript
                                 {
                                     if (inventory.CanTransferItemTo(pref.GetInventory(), item.Type))
                                     {
-                                        if (inventory.TransferItemTo(pref.GetInventory(), item) || inventory.TransferItemTo(pref.GetInventory(), item, MyFixedPoint.SmallestPossibleValue))
+                                        var amount = AmountToMove(item, pref.GetInventory());
+                                        if (amount != MyFixedPoint.Zero && inventory.TransferItemTo(pref.GetInventory(), item))
                                         {
+                                            debug.Add($"Moved {amount} {item.Type.SubtypeId} from {container.DisplayNameText} to {pref.DisplayNameText}");
                                             break;
                                         }
                                     }
                                 }
                             }
-
                         }
                     }
                 }
@@ -184,7 +185,7 @@ namespace IngameScript
 
                             if (c > 0 && cur < c && assembler.CanUseBlueprint(bp.Value))
                             {
-                                debug.Add($"Crafting {desired} on {assembler.DisplayNameText}");
+                                debug.Add($"Crafting {bp.Value.SubtypeName} on {assembler.DisplayNameText} to get to {c}");
                                 assembler.AddQueueItem(bp.Value, 1d);
                             }
                         }
@@ -260,11 +261,6 @@ namespace IngameScript
                 (block as IMyTextSurfaceProvider).GetSurface(0).FontSize = fontSize;
                 (block as IMyTextSurfaceProvider).GetSurface(0).WriteText(text);
             }
-        }
-
-        private MyFixedPoint FreeVolume(IMyCargoContainer cargo)
-        {
-            return cargo.GetInventory().MaxVolume - cargo.GetInventory().CurrentVolume;
         }
 
         private MyDefinitionId? GetBlueprintFor(string typeText)
@@ -349,12 +345,35 @@ namespace IngameScript
             return captures;
         }
 
+        private MyFixedPoint FreeVolume(IMyInventory inventory)
+        {
+            return inventory.MaxVolume - inventory.CurrentVolume;
+        }
+
+        private MyFixedPoint AmountToMove(MyInventoryItem item, IMyInventory to)
+        {
+            var fv = FreeVolume(to);
+            var iv = item.Type.GetItemInfo().Volume;
+
+            if ((float)fv > (iv * (float)item.Amount))
+            {
+                return item.Amount;
+            }
+
+            if ((float)fv > iv) {
+                return fv;
+            }
+
+            return MyFixedPoint.Zero;
+        }
+
         private bool DisplaysCategory(IMyTerminalBlock block, string category, bool isDefault)
         {
             var matches = GetConfig("category", block.CustomData);
 
             return matches.Count() > 0 ? matches.Any(m => m == category) : isDefault;
         }
+
         private string ToSI(MyFixedPoint a, string format = "f2")
         {
             double d = ((double)a);
