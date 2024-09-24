@@ -160,7 +160,7 @@ namespace IngameScript
         {
             foreach (IMyAssembler assembler in assemblers)
             {
-                if (assembler.IsProducing || !assembler.IsWorking)
+                if (assembler.IsProducing || !assembler.IsWorking || !assembler.IsQueueEmpty)
                 {
                     continue;
                 }
