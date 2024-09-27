@@ -25,6 +25,8 @@ namespace IngameScript
 
         private bool IsDebugMode = false;
 
+        private int tick = 0;
+
         public Program()
         {
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
@@ -40,8 +42,16 @@ namespace IngameScript
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
             GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
 
+            debug.Add($"Tick {tick}");
+
+            if (tick % 2 == 0)
+            {
             SortItems(containers, blocksToDrain);
 
+                Debug();
+            }
+            else
+            {
             var counts = CountItems(containers);
 
             CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
@@ -49,6 +59,12 @@ namespace IngameScript
             Debug();
 
             RenderInventory(counts);
+        }
+
+            if (tick++ > 100)
+            {
+                tick = 0;
+            }
         }
 
         private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly)
@@ -70,7 +86,8 @@ namespace IngameScript
             }
 
             MoveItemsToTargets(containers, preferredContainers);
-            if (DateTime.Now.Second % 3 == 0)
+
+            if (tick % 10 == 0)
             {
                 MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
             }
