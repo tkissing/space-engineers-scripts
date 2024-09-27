@@ -1,4 +1,5 @@
-﻿using Sandbox.ModAPI.Ingame;
+﻿using Sandbox.Definitions;
+using Sandbox.ModAPI.Ingame;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -14,6 +15,7 @@ namespace IngameScript
         // COPY AND PASTE START ON THIS LINE
 
         public static string[] categories = new string[] { "Component", "Ingot", "Ore" };
+        public static string[] hiddenCategories = new string[] { "AmmoMagazine" };
 
         public static System.Text.RegularExpressions.Regex configRegex = new System.Text.RegularExpressions.Regex("([a-z]+): ?([^\\s]+( \\d+)?)");
 
@@ -46,20 +48,20 @@ namespace IngameScript
 
             if (tick % 2 == 0)
             {
-            SortItems(containers, blocksToDrain);
+                SortItems(containers, blocksToDrain);
 
                 Debug();
             }
             else
             {
-            var counts = CountItems(containers);
+                var counts = CountItems(containers);
 
-            CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
+                CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
 
-            Debug();
+                Debug();
 
-            RenderInventory(counts);
-        }
+                RenderInventory(counts);
+            }
 
             if (tick++ > 100)
             {
@@ -147,7 +149,7 @@ namespace IngameScript
 
                 foreach (var item in items)
                 {
-                    foreach (var category in categories)
+                    foreach (var category in categories.Concat(hiddenCategories))
                     {
                         if (IsOfType(item, category))
                         {
@@ -282,30 +284,62 @@ namespace IngameScript
             }
         }
 
+        private string HumanSubtypeToMachine(string subtype)
+        {
+            switch (subtype)
+            {
+                case "Artillery":
+                    return "LargeCalibreAmmo";
+                case "Gattling":
+                    return "NATO_25x184mm";
+                case "Rocket":
+                    return "Missile200mm";
+            }
+            return subtype;
+        }
+
         private MyDefinitionId? GetBlueprintFor(string typeText)
         {
             string[] t = typeText.Split('/');
             string bp = "";
 
-            if (t.Length == 2 && t[0] == "Component")
+            if (t.Length == 2)
             {
-                switch (t[1])
+                if (t[0] == "Component")
                 {
-                    case "SmallTube":
-                    case "SolarCell":
-                    case "SteelPlate":
-                    case "Superconductor":
-                    case "InteriorPlate":
-                    case "MetalGrid":
-                    case "BulletproofGlass":
-                    case "Display":
-                    case "LargeTube":
-                    case "PowerCell":
-                        bp = t[1];
-                        break;
-                    default:
-                        bp = $"{t[1]}Component";
-                        break;
+                    switch (t[1])
+                    {
+                        case "SmallTube":
+                        case "SolarCell":
+                        case "SteelPlate":
+                        case "Superconductor":
+                        case "InteriorPlate":
+                        case "MetalGrid":
+                        case "BulletproofGlass":
+                        case "Display":
+                        case "LargeTube":
+                        case "PowerCell":
+                            bp = t[1];
+                            break;
+                        default:
+                            bp = $"{t[1]}Component";
+                            break;
+                    }
+                }
+                else if (t[0] == "AmmoMagazine")
+                {
+                    switch (HumanSubtypeToMachine(t[1]))
+                    {
+                        case "LargeCalibreAmmo":
+                            bp = "Position0120_LargeCalibreAmmo";
+                            break;
+                        case "NATO_25x184mm":
+                            bp = "Position0080_NATO_25x184mmMagazine";
+                            break;
+                        case "Missile200mm":
+                            bp = "Position0100_Missile200mm";
+                            break;
+                    }
                 }
             }
 
@@ -320,8 +354,9 @@ namespace IngameScript
         private MyFixedPoint GetCountFor(SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts, string typeText)
         {
             var t = typeText.Split('/');
+            var subtype = HumanSubtypeToMachine(t[1]);
 
-            return counts.ContainsKey(t[0]) && counts[t[0]].ContainsKey(t[1]) ? counts[t[0]][t[1]] : MyFixedPoint.Zero;
+            return counts.ContainsKey(t[0]) && counts[t[0]].ContainsKey(subtype) ? counts[t[0]][subtype] : MyFixedPoint.Zero;
         }
 
         private IEnumerable<IMyCargoContainer> SortedPreferred(List<IMyCargoContainer> prefs, MyInventoryItem item)
