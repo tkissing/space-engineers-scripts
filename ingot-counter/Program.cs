@@ -25,12 +25,20 @@ namespace IngameScript
         private List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
         private List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
 
+        private List<IMyTerminalBlock> textSurfaceBlocks = new List<IMyTerminalBlock>();
+
         private bool IsDebugMode = false;
 
         private int tick = 0;
 
+        string _broadCastTag = "InventoryBroadcast";
+        IMyBroadcastListener _myBroadcastListener;
+
         public Program()
         {
+            _myBroadcastListener = IGC.RegisterBroadcastListener(_broadCastTag);
+            _myBroadcastListener.SetMessageCallback(_broadCastTag);
+
             Runtime.UpdateFrequency = UpdateFrequency.Update100;
         }
 
@@ -40,13 +48,14 @@ namespace IngameScript
 
             containers.Clear();
             blocksToDrain.Clear();
+            textSurfaceBlocks.Clear();
 
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
             GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
 
-            debug.Add($"Tick {tick}");
+            //debug.Add($"Tick {tick}");
 
-            if (tick % 2 == 0)
+            if (tick % 2 == 1)
             {
                 SortItems(containers, blocksToDrain);
 
@@ -58,9 +67,11 @@ namespace IngameScript
 
                 CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
 
-                Debug();
-
                 RenderInventory(counts);
+
+                HandleIncomingMessages(updateSource);
+
+                Debug();
             }
 
             if (tick++ > 100)
@@ -190,31 +201,32 @@ namespace IngameScript
 
                 foreach (var desired in desiredCounts)
                 {
-                    var typeText = desired.Split(' ').First();
-                    var c = long.Parse(desired.Split(' ').Last());
-
-                    MyDefinitionId? bp = GetBlueprintFor(typeText);
-
-                    if (bp.HasValue)
+                    try
                     {
-                        try
+                        var typeText = desired.Split(' ').First();
+                        var c = long.Parse(desired.Split(' ').Last());
+
+                        MyDefinitionId? bp = GetBlueprintFor(typeText);
+
+                        if (bp.HasValue)
                         {
+
                             long cur = (long)GetCountFor(counts, typeText);
 
                             if (c > 0 && cur < c && assembler.CanUseBlueprint(bp.Value))
                             {
-                                debug.Add($"Crafting {bp.Value.SubtypeName} on {assembler.DisplayNameText} to get to {c}");
+                                //debug.Add($"Crafting {typeText} on {assembler.DisplayNameText} to get to {c}");
                                 assembler.AddQueueItem(bp.Value, 1d);
                             }
                         }
-                        catch (Exception e)
+                        else
                         {
-                            debug.Add(e.Message);
+                            debug.Add($"Blueprint for {typeText} is currently not supported as auto-craft target");
                         }
                     }
-                    else
+                    catch (Exception e)
                     {
-                        debug.Add($"Blueprint for {typeText} is currently not supported as auto-craft target");
+                        debug.Add(e.Message);
                     }
                 }
             }
@@ -223,7 +235,7 @@ namespace IngameScript
 
         private void WriteCounter(List<string> lines, SortedDictionary<string, MyFixedPoint> counterToShow, string categoryName)
         {
-            lines.Add($"Current {categoryName} Inventory");
+            lines.Add($"{Me.CubeGrid.CustomName} {categoryName} Inventory");
 
             foreach (var itemName in counterToShow.Keys)
             {
@@ -240,11 +252,13 @@ namespace IngameScript
             var timeBasedCategory = categoriesWithItems[(int)Math.Floor((double)(DateTime.Now.Second / secondsPerCategory))];
 
             var displayNames = GetConfig("display", $"{Me.DisplayNameText} {Me.CustomData}");
-            List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
+
+            var projectToOtherGrids = tick % 10 == 0 && GetConfig("broadcast", Me.CustomData).FirstOrDefault() == "true";
 
             foreach (var dn in displayNames)
             {
-                GridTerminalSystem.GetBlocksOfType(blocks, block => block.IsSameConstructAs(Me) && block is IMyTextSurfaceProvider &&
+                GridTerminalSystem.GetBlocksOfType(textSurfaceBlocks, block => block is IMyTextSurfaceProvider &&
+                    block.IsSameConstructAs(Me) &&
                     (block.DisplayNameText.Contains(dn) || GetConfig("display", block.CustomData).FirstOrDefault() == dn));
             }
 
@@ -254,11 +268,51 @@ namespace IngameScript
                 lines.Clear();
 
                 WriteCounter(lines, counts[category], category);
-                WriteText(lines, blocks.Where(b => DisplaysCategory(b, category, isDefaultCategory)));
+                var txt = WriteTextOnMatchingBlocks(lines, category, isDefaultCategory);
+
+                if (projectToOtherGrids)
+                {
+                    IGC.SendBroadcastMessage(_broadCastTag, $"{Me.CubeGrid.CustomName}|{category}|{isDefaultCategory}\n{txt}");
+                }
+
                 if (isDefaultCategory)
                 {
                     WriteText(lines, new List<IMyTerminalBlock> { Me });
-                    Echo(String.Join("\n", lines));
+                    Echo(txt);
+                }
+            }
+        }
+
+        private void HandleIncomingMessages(UpdateType updateSource)
+        {
+            if ((updateSource & UpdateType.IGC) > 0)
+            {
+                while (_myBroadcastListener.HasPendingMessage)
+                {
+                    MyIGCMessage myIGCMessage = _myBroadcastListener.AcceptMessage();
+                    if (myIGCMessage.Tag == _broadCastTag)
+                    {
+                        if (myIGCMessage.Data is string)
+                        {
+                            var lines = myIGCMessage.Data.ToString().Split('\n');
+
+                            if (lines.Length > 1)
+                            {
+                                var config = lines.First().Split('|');
+
+                                if (config.Length == 3)
+                                {
+                                    var sender = config[0];
+                                    var category = config[1];
+                                    var isDefaultCategory = config[2] == "True";
+
+                                    debug.Add($"Parsed message from {sender} for {category}. default {isDefaultCategory}!");
+
+                                    WriteTextOnMatchingBlocks(lines.Skip(1), category, isDefaultCategory, sender);
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -272,7 +326,14 @@ namespace IngameScript
             debug.Clear();
         }
 
-        private void WriteText(List<string> lines, IEnumerable<IMyTerminalBlock> blocks)
+        private string WriteTextOnMatchingBlocks(IEnumerable<string> lines, string category, bool isDefaultCategory, string remoteGridName = null)
+        {
+            return WriteText(lines, textSurfaceBlocks.Where(b => DisplaysCategory(b, category, isDefaultCategory) &&
+                GetConfig("grid", b.CustomData).FirstOrDefault() == remoteGridName
+            ));
+        }
+
+        private string WriteText(IEnumerable<string> lines, IEnumerable<IMyTerminalBlock> blocks)
         {
             float fontSize = Math.Min(1.2f, 17.0f / lines.Count());
             string text = String.Join("\n", lines);
@@ -282,15 +343,19 @@ namespace IngameScript
                 (block as IMyTextSurfaceProvider).GetSurface(0).FontSize = fontSize;
                 (block as IMyTextSurfaceProvider).GetSurface(0).WriteText(text);
             }
+
+            return text;
         }
 
         private string HumanSubtypeToMachine(string subtype)
         {
             switch (subtype)
             {
+                case "Assault":
+                    return "MediumCalibreAmmo";
                 case "Artillery":
                     return "LargeCalibreAmmo";
-                case "Gattling":
+                case "Gatling":
                     return "NATO_25x184mm";
                 case "Rocket":
                     return "Missile200mm";
@@ -332,6 +397,9 @@ namespace IngameScript
                     {
                         case "LargeCalibreAmmo":
                             bp = "Position0120_LargeCalibreAmmo";
+                            break;
+                        case "MediumCalibreAmmo":
+                            bp = "Position0110_MediumCalibreAmmo";
                             break;
                         case "NATO_25x184mm":
                             bp = "Position0080_NATO_25x184mmMagazine";
