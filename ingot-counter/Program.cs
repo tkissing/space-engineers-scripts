@@ -18,6 +18,7 @@ namespace IngameScript
         public static string[] hiddenCategories = new string[] { "AmmoMagazine" };
 
         public static System.Text.RegularExpressions.Regex configRegex = new System.Text.RegularExpressions.Regex("([a-z]+): ?([^\\s]+( \\d+)?)");
+        public static System.Text.RegularExpressions.Regex configRegexAllowSpace = new System.Text.RegularExpressions.Regex("([a-z]+): ?([ a-zA-Z0-9_-]+)");
 
         private List<string> debug = new List<string>();
         private List<string> lines = new List<string>();
@@ -280,10 +281,10 @@ namespace IngameScript
                     WriteText(lines, new List<IMyTerminalBlock> { Me });
                     if (!IsDebugMode)
                     {
-                    Echo(txt);
+                        Echo(txt);
+                    }
                 }
             }
-        }
         }
 
         private void HandleIncomingMessages(UpdateType updateSource)
@@ -332,7 +333,7 @@ namespace IngameScript
         private string WriteTextOnMatchingBlocks(IEnumerable<string> lines, string category, bool isDefaultCategory, string remoteGridName = null)
         {
             return WriteText(lines, textSurfaceBlocks.Where(b => DisplaysCategory(b, category, isDefaultCategory) &&
-                GetConfig("grid", b.CustomData).FirstOrDefault() == remoteGridName
+                GetConfig("grid", b.CustomData, true).FirstOrDefault() == remoteGridName?.Trim()
             ));
         }
 
@@ -458,18 +459,17 @@ namespace IngameScript
             return sorted;
         }
 
-        private IEnumerable<string> GetConfig(string key, string text)
+        private IEnumerable<string> GetConfig(string key, string text, bool allowSpace = false)
         {
             var captures = new List<string>();
 
-            var matches = configRegex.Matches(text);
+            var matches = (allowSpace ? configRegexAllowSpace : configRegex).Matches(text);
 
             for (var i = 0; i < matches.Count; i++)
             {
-                var match = matches[i];
-                if (match.Success && match.Result("$1") == key)
+                if (matches[i].Success && matches[i].Result("$1") == key)
                 {
-                    captures.Add(match.Result("$2"));
+                    captures.Add(matches[i].Result("$2"));
                 }
             }
 
