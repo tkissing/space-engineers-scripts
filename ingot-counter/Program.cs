@@ -407,6 +407,12 @@ namespace IngameScript
                         case "Missile200mm":
                             bp = "Position0100_Missile200mm";
                             break;
+                        case "LargeRailgunAmmo":
+                            bp = "Position0140_LargeRailgunAmmo";
+                            break;
+                        case "SmallRailgunAmmo":
+                            bp = "Position0130_SmallRailgunAmmo";
+                            break;
                     }
                 }
             }
