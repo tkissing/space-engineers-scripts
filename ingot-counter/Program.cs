@@ -278,9 +278,12 @@ namespace IngameScript
                 if (isDefaultCategory)
                 {
                     WriteText(lines, new List<IMyTerminalBlock> { Me });
+                    if (!IsDebugMode)
+                    {
                     Echo(txt);
                 }
             }
+        }
         }
 
         private void HandleIncomingMessages(UpdateType updateSource)
