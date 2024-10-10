@@ -20,6 +20,8 @@ namespace IngameScript
         public static System.Text.RegularExpressions.Regex configRegex = new System.Text.RegularExpressions.Regex("([a-z]+): ?([^\\s]+( \\d+)?)");
         public static System.Text.RegularExpressions.Regex configRegexAllowSpace = new System.Text.RegularExpressions.Regex("([a-z]+): ?([ a-zA-Z0-9_-]+)");
 
+        private SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts = new SortedDictionary<string, SortedDictionary<string, MyFixedPoint>>();
+
         private List<string> debug = new List<string>();
         private List<string> lines = new List<string>();
 
@@ -64,7 +66,7 @@ namespace IngameScript
             }
             else
             {
-                var counts = CountItems(containers);
+                CountItems(containers);
 
                 CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
 
@@ -149,9 +151,12 @@ namespace IngameScript
             }
         }
 
-        private SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> CountItems(IEnumerable<IMyCargoContainer> containers)
+        private void CountItems(IEnumerable<IMyCargoContainer> containers)
         {
-            SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts = new SortedDictionary<string, SortedDictionary<string, MyFixedPoint>>();
+            foreach (var category in categories.Concat(hiddenCategories))
+            {
+                counts[category] = new SortedDictionary<string, MyFixedPoint>();
+            }
 
             foreach (var container in containers)
             {
@@ -165,11 +170,6 @@ namespace IngameScript
                     {
                         if (IsOfType(item, category))
                         {
-                            if (!counts.ContainsKey(category))
-                            {
-                                counts[category] = new SortedDictionary<string, MyFixedPoint>();
-                            }
-
                             var subtype = DisplayName(item);
 
                             if (counts[category].ContainsKey(subtype))
@@ -185,8 +185,6 @@ namespace IngameScript
                     }
                 }
             }
-
-            return counts;
         }
 
         private void CraftItems(SortedDictionary<string, SortedDictionary<string, MyFixedPoint>> counts, IEnumerable<IMyTerminalBlock> assemblers)
@@ -263,7 +261,7 @@ namespace IngameScript
                     (block.DisplayNameText.Contains(dn) || GetConfig("display", block.CustomData).FirstOrDefault() == dn));
             }
 
-            foreach (var category in categoriesWithItems)
+            foreach (var category in categories)
             {
                 bool isDefaultCategory = category == timeBasedCategory;
                 lines.Clear();
