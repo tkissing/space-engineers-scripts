@@ -1,4 +1,5 @@
-﻿using Sandbox.Definitions;
+﻿using Microsoft.Build.Framework.XamlTypes;
+using Sandbox.Definitions;
 using Sandbox.ModAPI.Ingame;
 using System;
 using System.Collections.Generic;
@@ -28,11 +29,17 @@ namespace IngameScript
         private List<IMyCargoContainer> containers = new List<IMyCargoContainer>();
         private List<IMyTerminalBlock> blocksToDrain = new List<IMyTerminalBlock>();
 
+        private Dictionary<string, List<IMyCargoContainer>> preferredContainers = new Dictionary<string, List<IMyCargoContainer>>();
+
         private List<IMyTerminalBlock> textSurfaceBlocks = new List<IMyTerminalBlock>();
 
         private bool IsDebugMode = false;
 
         private int tick = 0;
+
+        private string[] actions = new string[] { "sort", "craft", "unload" };
+
+        private string currentAction = null;
 
         string _broadCastTag = "InventoryBroadcast";
         IMyBroadcastListener _myBroadcastListener;
@@ -54,28 +61,32 @@ namespace IngameScript
             textSurfaceBlocks.Clear();
 
             GridTerminalSystem.GetBlocksOfType(containers, block => block.IsSameConstructAs(Me) && block is IMyCargoContainer);
-            GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
 
-            //debug.Add($"Tick {tick}");
+            currentAction = actions[tick % actions.Length];
 
-            if (tick % 2 == 1)
+            debug.Add($"Tick {tick}: {currentAction}");
+
+            if (currentAction == "sort")
             {
+                GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
                 SortItems(containers, blocksToDrain);
-
-                Debug();
             }
-            else
+            else if (currentAction == "craft")
             {
+                GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && block is IMyAssembler);
+
                 CountItems(containers);
-
                 CraftItems(counts, blocksToDrain.Where(b => b is IMyAssembler && b.CustomData.Length > 5));
-
                 RenderInventory(counts);
-
-                HandleIncomingMessages(updateSource);
-
-                Debug();
             }
+            else if (currentAction == "unload")
+            {
+                UnloadShipCargo();
+            }
+
+            HandleIncomingMessages(updateSource);
+
+            Debug();
 
             if (tick++ > 100)
             {
@@ -83,9 +94,10 @@ namespace IngameScript
             }
         }
 
-        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly)
+        private void DeterminePreferredContainers()
         {
-            Dictionary<string, List<IMyCargoContainer>> preferredContainers = new Dictionary<string, List<IMyCargoContainer>>();
+            preferredContainers.Clear();
+
             foreach (var container in containers)
             {
                 if (container.IsWorking && container.CustomData.Length > 5)
@@ -100,12 +112,29 @@ namespace IngameScript
                     }
                 }
             }
+        }
+
+        private void SortItems(IEnumerable<IMyCargoContainer> containers, IEnumerable<IMyTerminalBlock> blocksToDrainOnly)
+        {
+            DeterminePreferredContainers();
 
             MoveItemsToTargets(containers, preferredContainers);
+            MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
+        }
 
-            if (tick % 10 == 0)
+        private void UnloadShipCargo()
+        {
+            GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => !block.IsSameConstructAs(Me) && block is IMyCargoContainer
+                && HasConfig(block, "unload", Me.CubeGrid.CustomName)
+                && AllThrustersOff(block.CubeGrid));
+
+            //debug.Add($"Found {blocksToDrain.Count} containers to drain");
+
+            if (blocksToDrain.Count > 0)
             {
-                MoveItemsToTargets(blocksToDrainOnly, preferredContainers);
+                DeterminePreferredContainers();
+
+                MoveItemsToTargets(blocksToDrain, preferredContainers);
             }
         }
 
@@ -139,7 +168,10 @@ namespace IngameScript
                                         var amount = AmountToMove(item, pref.GetInventory());
                                         if (amount != MyFixedPoint.Zero && inventory.TransferItemTo(pref.GetInventory(), item))
                                         {
-                                            debug.Add($"Moved {amount} {item.Type.SubtypeId} from {container.DisplayNameText} to {pref.DisplayNameText}");
+                                            if (currentAction == "unload")
+                                            {
+                                                debug.Add($"Moved {amount} {item.Type.SubtypeId} from {container.DisplayNameText} to {pref.DisplayNameText}");
+                                            }
                                             break;
                                         }
                                     }
@@ -150,7 +182,6 @@ namespace IngameScript
                 }
             }
         }
-
         private void CountItems(IEnumerable<IMyCargoContainer> containers)
         {
             foreach (var category in categories.Concat(hiddenCategories))
@@ -252,13 +283,12 @@ namespace IngameScript
 
             var displayNames = GetConfig("display", $"{Me.DisplayNameText} {Me.CustomData}");
 
-            var projectToOtherGrids = tick % 10 == 0 && GetConfig("broadcast", Me.CustomData).FirstOrDefault() == "true";
+            var projectToOtherGrids = tick % 10 == 0 && HasConfig(Me, "broadcast", "true");
 
             foreach (var dn in displayNames)
             {
                 GridTerminalSystem.GetBlocksOfType(textSurfaceBlocks, block => block is IMyTextSurfaceProvider &&
-                    block.IsSameConstructAs(Me) &&
-                    (block.DisplayNameText.Contains(dn) || GetConfig("display", block.CustomData).FirstOrDefault() == dn));
+                    block.IsSameConstructAs(Me) && HasConfig(block, "display", dn));
             }
 
             foreach (var category in categories)
@@ -308,7 +338,7 @@ namespace IngameScript
                                     var category = config[1];
                                     var isDefaultCategory = config[2] == "True";
 
-                                    debug.Add($"Parsed message from {sender} for {category}. default {isDefaultCategory}!");
+                                    //debug.Add($"Parsed message from {sender} for {category}. default {isDefaultCategory}!");
 
                                     WriteTextOnMatchingBlocks(lines.Skip(1), category, isDefaultCategory, sender);
                                 }
@@ -330,7 +360,7 @@ namespace IngameScript
 
         private string WriteTextOnMatchingBlocks(IEnumerable<string> lines, string category, bool isDefaultCategory, string remoteGridName = null)
         {
-            return WriteText(lines, textSurfaceBlocks.Where(b => DisplaysCategory(b, category, isDefaultCategory) &&
+            return WriteText(lines, textSurfaceBlocks.Where(b => HasConfig(b, "category", category, isDefaultCategory) &&
                 GetConfig("grid", b.CustomData, true).FirstOrDefault() == remoteGridName?.Trim()
             ));
         }
@@ -474,6 +504,22 @@ namespace IngameScript
             return captures;
         }
 
+        private bool HasConfig(IMyTerminalBlock block, string key, string value, bool defaultValue = false)
+        {
+            var matches = GetConfig(key, block.CustomData);
+
+            return matches.Count() > 0 ? matches.Any(m => m == value) : defaultValue;
+        }
+
+        private bool AllThrustersOff(IMyCubeGrid grid)
+        {
+            List<IMyThrust> thrusters = new List<IMyThrust>();
+
+            GridTerminalSystem.GetBlocksOfType(thrusters, block => block.CubeGrid == grid && block is IMyThrust);
+
+            return !thrusters.Any(t => t.IsWorking);
+        }
+
         private MyFixedPoint FreeVolume(IMyInventory inventory)
         {
             return inventory.MaxVolume - inventory.CurrentVolume;
@@ -495,13 +541,6 @@ namespace IngameScript
             }
 
             return MyFixedPoint.Zero;
-        }
-
-        private bool DisplaysCategory(IMyTerminalBlock block, string category, bool isDefault)
-        {
-            var matches = GetConfig("category", block.CustomData);
-
-            return matches.Count() > 0 ? matches.Any(m => m == category) : isDefault;
         }
 
         private string ToSI(MyFixedPoint a, string format = "f2")
