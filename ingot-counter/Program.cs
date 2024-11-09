@@ -1,5 +1,4 @@
-﻿using Microsoft.Build.Framework.XamlTypes;
-using Sandbox.Definitions;
+﻿using Sandbox.Definitions;
 using Sandbox.ModAPI.Ingame;
 using System;
 using System.Collections.Generic;
@@ -16,7 +15,7 @@ namespace IngameScript
         // COPY AND PASTE START ON THIS LINE
 
         public static string[] categories = new string[] { "Component", "Ingot", "Ore" };
-        public static string[] hiddenCategories = new string[] { "AmmoMagazine" };
+        public static string[] hiddenCategories = new string[] { "AmmoMagazine", "PhysicalGunObject" };
 
         public static System.Text.RegularExpressions.Regex configRegex = new System.Text.RegularExpressions.Regex("([a-z]+): ?([^\\s]+( \\d+)?)");
         public static System.Text.RegularExpressions.Regex configRegexAllowSpace = new System.Text.RegularExpressions.Regex("([a-z]+): ?([ a-zA-Z0-9_-]+)");
@@ -68,7 +67,7 @@ namespace IngameScript
 
             if (currentAction == "sort")
             {
-                GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && (block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler));
+                GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => block.IsSameConstructAs(Me) && IsBlockToDrain(block));
                 SortItems(containers, blocksToDrain);
             }
             else if (currentAction == "craft")
@@ -124,8 +123,9 @@ namespace IngameScript
 
         private void UnloadShipCargo()
         {
-            GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => !block.IsSameConstructAs(Me) && block is IMyCargoContainer
-                && HasConfig(block, "unload", Me.CubeGrid.CustomName)
+            GridTerminalSystem.GetBlocksOfType(blocksToDrain, block => !block.IsSameConstructAs(Me)
+                && (block is IMyCargoContainer ||  IsBlockToDrain(block))
+                && HasConfig(block, "unload", Me.CubeGrid.CustomName, true)
                 && AllThrustersOff(block.CubeGrid));
 
             //debug.Add($"Found {blocksToDrain.Count} containers to drain");
@@ -360,7 +360,7 @@ namespace IngameScript
 
         private string WriteTextOnMatchingBlocks(IEnumerable<string> lines, string category, bool isDefaultCategory, string remoteGridName = null)
         {
-            return WriteText(lines, textSurfaceBlocks.Where(b => HasConfig(b, "category", category, isDefaultCategory) &&
+            return WriteText(lines, textSurfaceBlocks.Where(b => HasConfig(b, "category", category, false, isDefaultCategory) &&
                 GetConfig("grid", b.CustomData, true).FirstOrDefault() == remoteGridName?.Trim()
             ));
         }
@@ -504,9 +504,9 @@ namespace IngameScript
             return captures;
         }
 
-        private bool HasConfig(IMyTerminalBlock block, string key, string value, bool defaultValue = false)
+        private bool HasConfig(IMyTerminalBlock block, string key, string value, bool allowSpace = false, bool defaultValue = false )
         {
-            var matches = GetConfig(key, block.CustomData);
+            var matches = GetConfig(key, block.CustomData, allowSpace);
 
             return matches.Count() > 0 ? matches.Any(m => m == value) : defaultValue;
         }
@@ -518,6 +518,11 @@ namespace IngameScript
             GridTerminalSystem.GetBlocksOfType(thrusters, block => block.CubeGrid == grid && block is IMyThrust);
 
             return !thrusters.Any(t => t.IsWorking);
+        }
+
+        private bool IsBlockToDrain(IMyTerminalBlock block)
+        {
+            return block is IMyShipConnector || block is IMyRefinery || block is IMyAssembler || block is IMyShipDrill;
         }
 
         private MyFixedPoint FreeVolume(IMyInventory inventory)
